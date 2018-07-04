@@ -30,7 +30,7 @@ class KernelDensityBoundaries1D(BaseEstimator):
     """
 
     def __init__(self, kernel="gaussian", boundaries=None, bandwidth=1,
-                 spline_approx=False, n_approx=-1):
+                 n_approx=-1):
         """
         Called when initializing the classifier
         """
@@ -71,12 +71,12 @@ class KernelDensityBoundaries1D(BaseEstimator):
                 raise RuntimeError("Xmin must be smaller than Xmax!")
 
             Xvals = np.linspace(Xmin, Xmax, self.n_approx)
-            self.interpol_ = interp1d(Xvals, self._eval(Xvals, False),
+            self.interpol_ = interp1d(Xvals, self.eval(Xvals, False),
                                       kind="cubic")
 
         return self
 
-    def _eval(self, xi, usespline="False"):
+    def eval(self, xi, usespline="False"):
         """ Evaluate point by point
 
         Parameters
@@ -93,8 +93,10 @@ class KernelDensityBoundaries1D(BaseEstimator):
             return self.interpol_(xi)
         else:
             if self.kernel == "gaussian":
-                return sum(stats.norm.pdf(xi, loc=xcent, scale=self.bandwidth)
-                           for xcent in self.Xvalues_)/self.Xvalues_.shape[0]
+                return np.divide(np.sum(stats.norm.pdf(xi, loc=xcent,
+                                                       scale=self.bandwidth)
+                                        for xcent in self.Xvalues_),
+                                 self.Xvalues_.shape[0])
 
     def score_samples(self, X, y=None):
         """Evaluate the density model on the data.
@@ -107,7 +109,7 @@ class KernelDensityBoundaries1D(BaseEstimator):
         density : ndarray, shape (n_samples,)
             The array of density evaluations.
         """
-        return [self._eval(xi, self.do_spline) for xi in X]
+        return [self.eval(xi, self.do_spline) for xi in X]
 
     def score(self, X, y=None):
         # To make it compatible with
