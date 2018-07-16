@@ -4,7 +4,7 @@ import numpy as np
 from scipy import stats
 
 KERNELS = ['gaussian']
-BOUNDARY = ['reflection']
+BOUNDARY = ['reflection', 'CowlingHall']
 
 
 def GAUSSKERN(xi, mean, bw, npts):
@@ -29,6 +29,9 @@ def GAUSSKERN(xi, mean, bw, npts):
 
     return np.divide(np.sum(stats.norm.pdf(xi, loc=mean, scale=bw)), npts)
 
+
+#def TOPHATKERN(xi, val, bw, npts):
+#    return np.divide(np.sum((xi-val) < bw), npts)
 
 class KernelDensityBoundaries1D(BaseEstimator):
     """A Kernel Density Estimator with boundary corrections
@@ -95,6 +98,15 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
         self.Xvalues_ = X.copy()
 
+        if self.boundary == "CowlingHall":
+
+            Xmin, Xmax = self.range
+            Npts = int((self.Xvalues_.shape[0])/3)
+            sortpts = np.sort(self.Xvalues_.copy())
+            self.Xpseudodata_ = 4*Xmin - 6*sortpts[:Npts] + \
+                4*sortpts[:2*Npts:2] - sortpts[:3*Npts:3]
+
+
         if self.n_approx >= 2:
 
             Xmin, Xmax = self.range
@@ -126,12 +138,15 @@ class KernelDensityBoundaries1D(BaseEstimator):
         bw = self.bandwidth
         npts = self.Xvalues_.shape[0]
 
+        # If spline, we return the interpolation and we skip the rest
         if usespline:
             return self.interpol_(xi)
 
-        elif self.boundary is None:
-            if self.kernel == "gaussian":
-                KERNEL = GAUSSKERN
+        # Choose kernel
+        if self.kernel == "gaussian":
+            KERNEL = GAUSSKERN
+
+        if self.boundary is None:
 
             return KERNEL(xi, samplevalues, bw, npts)
 
@@ -139,18 +154,15 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
             Xmin, Xmax = self.range
 
-            if self.kernel == "gaussian":
-                KERNEL = GAUSSKERN
-
             return KERNEL(xi, samplevalues, bw, npts) + \
                 KERNEL(2*Xmin - xi, samplevalues, bw, npts) + \
                 KERNEL(2*Xmax - xi, samplevalues, bw, npts)
-#                return GAUSSKERN(xi, self.Xvalues_, self.bandwidth,
-#                                 self.Xvalues_.shape[0]) + \
-#                       GAUSSKERN(2*Xmin - xi, self.Xvalues_, self.bandwidth,
-#                                 self.Xvalues_.shape[0]) + \
-#                       GAUSSKERN(2*Xmax - xi, self.Xvalues_, self.bandwidth,
-#                                 self.Xvalues_.shape[0])
+
+        elif self.boundary == "CowlingHall":
+
+            return KERNEL(xi, samplevalues, bw, npts) + \
+                KERNEL(xi, self.Xpseudodata_, bw, npts)
+
 
     def score_samples(self, X, y=None):
         """Evaluate the density model on the data.
