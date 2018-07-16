@@ -3,7 +3,7 @@ from scipy.interpolate import interp1d
 import numpy as np
 from scipy import stats
 
-KERNELS = ['gaussian']
+KERNELS = ['gaussian', 'tophat', 'epanechnikov', 'expo', 'linear']
 BOUNDARY = ['reflection', 'CowlingHall']
 
 
@@ -30,8 +30,23 @@ def GAUSSKERN(xi, mean, bw, npts):
     return np.divide(np.sum(stats.norm.pdf(xi, loc=mean, scale=bw)), npts)
 
 
-#def TOPHATKERN(xi, val, bw, npts):
-#    return np.divide(np.sum((xi-val) < bw), npts)
+def TOPHATKERN(xi, val, bw, npts):
+    return np.divide((np.abs(xi - val) < bw).sum(), npts*bw*2)
+
+
+def EPANECHNIKOVKERN(xi, val, bw, npts):
+    return np.divide(np.sum(1-(np.power((xi-val)/bw, 2))), npts*bw)
+
+
+def EXPOKERN(xi, val, bw, npts):
+    return np.divide(np.sum(np.exp(-np.abs(xi-val)/bw)), npts*bw*2)
+
+
+def LINEARKERN(xi, val, bw, npts):
+    temparray = np.abs(xi - val)
+    temparray = temparray[temparray < bw]
+    return np.divide(np.sum(1-(temparray)/bw), npts*bw)
+
 
 class KernelDensityBoundaries1D(BaseEstimator):
     """A Kernel Density Estimator with boundary corrections
@@ -145,6 +160,14 @@ class KernelDensityBoundaries1D(BaseEstimator):
         # Choose kernel
         if self.kernel == "gaussian":
             KERNEL = GAUSSKERN
+        elif self.kernel == "tophat":
+            KERNEL = TOPHATKERN
+        elif self.kernel == "epanechnikov":
+            KERNEL = EPANECHNIKOVKERN
+        elif self.kernel == "expo":
+            KERNEL = EXPOKERN
+        elif self.kernel == "linear":
+            KERNEL = LINEARKERN
 
         if self.boundary is None:
 
