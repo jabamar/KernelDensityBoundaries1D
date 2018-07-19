@@ -6,15 +6,16 @@ Kernel Density Estimation
 
 import numpy as np
 from scipy.special import gammainc
-from ..base import BaseEstimator
-from ..utils import check_array, check_random_state
-from ..utils.extmath import row_norms
-from .ball_tree import BallTree, DTYPE
-from .kd_tree import KDTree
+from sklearn.base import BaseEstimator
+from sklearn.utils import check_array, check_random_state
+from sklearn.utils.extmath import row_norms
+from sklearn.neighbors.ball_tree import BallTree, DTYPE
+from sklearn.neighbors.kd_tree import KDTree
 
 
 VALID_KERNELS = ['gaussian', 'tophat', 'epanechnikov', 'exponential', 'linear',
                  'cosine']
+VALID_BOUNDARIES = ['reflection', 'CowlingHall']
 TREE_DICT = {'ball_tree': BallTree, 'kd_tree': KDTree}
 
 
@@ -71,7 +72,8 @@ class KernelDensity(BaseEstimator):
     """
     def __init__(self, bandwidth=1.0, algorithm='auto',
                  kernel='gaussian', metric="euclidean", atol=0, rtol=0,
-                 breadth_first=True, leaf_size=40, metric_params=None):
+                 breadth_first=True, leaf_size=40, metric_params=None,
+                 boundaries=None, boundrange=None):
         self.algorithm = algorithm
         self.bandwidth = bandwidth
         self.kernel = kernel
@@ -81,6 +83,8 @@ class KernelDensity(BaseEstimator):
         self.breadth_first = breadth_first
         self.leaf_size = leaf_size
         self.metric_params = metric_params
+        self.boundaries = boundaries
+        self.boundrange = boundrange
 
         # run the choose algorithm code so that exceptions will happen here
         # we're using clone() in the GenerativeBayes classifier,
@@ -91,6 +95,8 @@ class KernelDensity(BaseEstimator):
             raise ValueError("bandwidth must be positive")
         if kernel not in VALID_KERNELS:
             raise ValueError("invalid kernel: '{0}'".format(kernel))
+        if boundaries is not None and boundaries not in VALID_BOUNDARIES:
+            raise ValueError("invalid boundary method '{0}'".format(boundaries))
 
     def _choose_algorithm(self, algorithm, metric):
         # given the algorithm string + metric string, choose the optimal
@@ -124,6 +130,14 @@ class KernelDensity(BaseEstimator):
         algorithm = self._choose_algorithm(self.algorithm, self.metric)
         X = check_array(X, order='C', dtype=DTYPE)
 
+        if self.boundaries == "CowlingHall" and X.shape[1] == 1:
+            Xmin, Xmax = self.boundrange
+            Npts = int((X.shape[0])/3)
+            sortpts = np.sort(X.copy())
+            Xpseudodata = 4*Xmin - 6*sortpts[:Npts] + \
+                4*sortpts[:2*Npts:2] - sortpts[:3*Npts:3]
+            X = np.concatenate((X, Xpseudodata))
+
         kwargs = self.metric_params
         if kwargs is None:
             kwargs = {}
@@ -151,11 +165,35 @@ class KernelDensity(BaseEstimator):
         # we'll also scale atol.
         X = check_array(X, order='C', dtype=DTYPE)
         N = self.tree_.data.shape[0]
+
+        if self.boundaries == "CowlingHall" and X.shape[1] == 1:
+            N = 3/4*N
+
         atol_N = self.atol * N
         log_density = self.tree_.kernel_density(
             X, h=self.bandwidth, kernel=self.kernel, atol=atol_N,
             rtol=self.rtol, breadth_first=self.breadth_first, return_log=True)
+
         log_density -= np.log(N)
+
+        if self.boundaries == "reflection" and X.shape[1] == 1:
+            Xmin, Xmax = self.boundrange
+
+            log_density_min = self.tree_.kernel_density(
+                2*Xmin - X, h=self.bandwidth, kernel=self.kernel, atol=atol_N,
+                rtol=self.rtol, breadth_first=self.breadth_first,
+                return_log=True)
+            log_density_min -= np.log(N)
+
+            log_density_max = self.tree_.kernel_density(
+                2*Xmax - X, h=self.bandwidth, kernel=self.kernel, atol=atol_N,
+                rtol=self.rtol, breadth_first=self.breadth_first,
+                return_log=True)
+            log_density_max -= np.log(N)
+
+            log_density = np.log(np.exp(log_density) + np.exp(log_density_min)
+                                 + np.exp(log_density_max))
+
         return log_density
 
     def score(self, X, y=None):
