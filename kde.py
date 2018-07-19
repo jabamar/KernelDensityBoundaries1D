@@ -22,7 +22,7 @@ TREE_DICT = {'ball_tree': BallTree, 'kd_tree': KDTree}
 # TODO: implement a brute force version for testing purposes
 # TODO: bandwidth estimation
 # TODO: create a density estimation base class?
-class KernelDensity(BaseEstimator):
+class KernelDensityMod(BaseEstimator):
     """Kernel Density Estimation
 
     Read more in the :ref:`User Guide <kernel_density>`.
@@ -70,6 +70,7 @@ class KernelDensity(BaseEstimator):
         metric.  For more information, see the documentation of
         :class:`BallTree` or :class:`KDTree`.
     """
+
     def __init__(self, bandwidth=1.0, algorithm='auto',
                  kernel='gaussian', metric="euclidean", atol=0, rtol=0,
                  breadth_first=True, leaf_size=40, metric_params=None,
