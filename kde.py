@@ -69,12 +69,25 @@ class KernelDensityMod(BaseEstimator):
         Additional parameters to be passed to the tree for use with the
         metric.  For more information, see the documentation of
         :class:`BallTree` or :class:`KDTree`.
+
+    boundary: string
+        Boundary conditions for distributions which do not tend to zero in the
+        boundaries.
+        If None, not considered.
+        If "reflection", it applies a reflection at both ends of range (see
+        http://www.ton.scphys.kyoto-u.ac.jp/~shino/toolbox/reflectedkernel/reflectedkernel.html).
+        If "CowlingHall", The Cowling and Hall method as shown in
+        DOI: 10.1103/PhysRevD.97.115047 (original at
+        ttps://www.jstor.org/stable/2345893 ) is performed.
+
+    boundrange: list of floats (length 2)
+        Boundary range of the density distribution
     """
 
     def __init__(self, bandwidth=1.0, algorithm='auto',
                  kernel='gaussian', metric="euclidean", atol=0, rtol=0,
                  breadth_first=True, leaf_size=40, metric_params=None,
-                 boundaries=None, boundrange=None):
+                 boundary=None, boundrange=None):
         self.algorithm = algorithm
         self.bandwidth = bandwidth
         self.kernel = kernel
@@ -84,7 +97,7 @@ class KernelDensityMod(BaseEstimator):
         self.breadth_first = breadth_first
         self.leaf_size = leaf_size
         self.metric_params = metric_params
-        self.boundaries = boundaries
+        self.boundary = boundary
         self.boundrange = boundrange
 
         # run the choose algorithm code so that exceptions will happen here
@@ -96,8 +109,10 @@ class KernelDensityMod(BaseEstimator):
             raise ValueError("bandwidth must be positive")
         if kernel not in VALID_KERNELS:
             raise ValueError("invalid kernel: '{0}'".format(kernel))
-        if boundaries is not None and boundaries not in VALID_BOUNDARIES:
-            raise ValueError("invalid boundary method '{0}'".format(boundaries))
+        if boundary is not None and boundary not in VALID_BOUNDARIES:
+            raise ValueError("invalid boundary method '{0}'".format(boundary))
+        if self.boundary is not None and self.boundrange is None:
+            raise ValueError("Boundary range is needed")
 
     def _choose_algorithm(self, algorithm, metric):
         # given the algorithm string + metric string, choose the optimal
@@ -131,7 +146,7 @@ class KernelDensityMod(BaseEstimator):
         algorithm = self._choose_algorithm(self.algorithm, self.metric)
         X = check_array(X, order='C', dtype=DTYPE)
 
-        if self.boundaries == "CowlingHall" and X.shape[1] == 1:
+        if self.boundary == "CowlingHall" and X.shape[1] == 1:
             Xmin, Xmax = self.boundrange
             Npts = int((X.shape[0])/3)
             sortpts = np.sort(X.copy())
@@ -167,7 +182,7 @@ class KernelDensityMod(BaseEstimator):
         X = check_array(X, order='C', dtype=DTYPE)
         N = self.tree_.data.shape[0]
 
-        if self.boundaries == "CowlingHall" and X.shape[1] == 1:
+        if self.boundary == "CowlingHall" and X.shape[1] == 1:
             N = 3/4*N
 
         atol_N = self.atol * N
@@ -177,7 +192,7 @@ class KernelDensityMod(BaseEstimator):
 
         log_density -= np.log(N)
 
-        if self.boundaries == "reflection" and X.shape[1] == 1:
+        if self.boundary == "reflection" and X.shape[1] == 1:
             Xmin, Xmax = self.boundrange
 
             log_density_min = self.tree_.kernel_density(
