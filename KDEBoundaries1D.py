@@ -1,3 +1,7 @@
+"""
+Kernel Density Estimation (only 1D)
+-------------------------
+"""
 from sklearn.base import BaseEstimator
 from scipy.interpolate import interp1d
 import numpy as np
@@ -61,17 +65,20 @@ class KernelDensityBoundaries1D(BaseEstimator):
         List of dimension 2 [Xmin, Xmax] which gives the minimum/maximum value
         of the distribution to estimate
 
-    spline_approx : bool
-        if True, the output of score_samples is given by a spline to make
-        the calculations faster
+    bandwith: float
+        Smoothing parameter for the kernel
 
     boundary: string
         if None, it calculates the KDE ignoring any boundary condition
         if "reflection", it applies a reflection at both ends of range (see
-        http://www.ton.scphys.kyoto-u.ac.jp/~shino/toolbox/reflectedkernel/reflectedkernel.html)
+        http://www.ton.scphys.kyoto-u.ac.jp/~shino/toolbox/reflectedkernel/reflectedkernel.html).
+        If "CowlingHall", The Cowling and Hall method as shown in
+        DOI: 10.1103/PhysRevD.97.115047 (original at
+        ttps://www.jstor.org/stable/2345893 ) is performed.
 
     n_approx : int
-        number of points for the spline.
+        number of points for the spline. A spline is used if n_approx >= 2,
+        otherwise this is ignored.
 
 
     """
@@ -113,6 +120,7 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
         self.Xvalues_ = X.copy()
 
+        # Generate Pseudodata points for Cowling-Hall
         if self.boundary == "CowlingHall":
 
             Xmin, Xmax = self.range
@@ -120,7 +128,6 @@ class KernelDensityBoundaries1D(BaseEstimator):
             sortpts = np.sort(self.Xvalues_.copy())
             self.Xpseudodata_ = 4*Xmin - 6*sortpts[:Npts] + \
                 4*sortpts[:2*Npts:2] - sortpts[:3*Npts:3]
-
 
         if self.n_approx >= 2:
 
@@ -171,21 +178,22 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
         if self.boundary is None:
 
-            return KERNEL(xi, samplevalues, bw, npts)
+            returnval = KERNEL(xi, samplevalues, bw, npts)
 
         elif self.boundary == "reflection":
 
             Xmin, Xmax = self.range
 
-            return KERNEL(xi, samplevalues, bw, npts) + \
+            returnval = KERNEL(xi, samplevalues, bw, npts) + \
                 KERNEL(2*Xmin - xi, samplevalues, bw, npts) + \
                 KERNEL(2*Xmax - xi, samplevalues, bw, npts)
 
         elif self.boundary == "CowlingHall":
 
-            return KERNEL(xi, samplevalues, bw, npts) + \
+            returnval = KERNEL(xi, samplevalues, bw, npts) + \
                 KERNEL(xi, self.Xpseudodata_, bw, npts)
 
+        return returnval if returnval > 1e-40 else 1e-40
 
     def score_samples(self, X, y=None):
         """Evaluate the density model on the data.
@@ -201,5 +209,12 @@ class KernelDensityBoundaries1D(BaseEstimator):
         return [self.eval(xi, self.do_spline) for xi in X]
 
     def score(self, X, y=None):
-        # To make it compatible with
+        """Evaluates the total log probability for the array X
+        (as done in the sklearn class)
+
+        Parameters
+        ----------
+        X : array_like, shape (n_samples, n_features=1)
+            An array of points to query.  Last dimension must be 1.
+        """
         return(sum(np.log(self.score_samples(X))))
