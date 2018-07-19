@@ -13,10 +13,11 @@ implementation. A rough modification to the KernelDensity class (called
 KernelDensityMod) has also been done to include boundary conditions.
 
 
-### Requirements
+### Requirements and installation
 
 Packages needed: sklearn, scipy, numpy
+To install, simply download the repo and add it to PYTHONPATH
 
 ### License
 
-Modified BSD 3 Clause. 
+Modified BSD 3 Clause.
