@@ -39,7 +39,9 @@ def TOPHATKERN(xi, val, bw, npts):
 
 
 def EPANECHNIKOVKERN(xi, val, bw, npts):
-    return np.divide(np.sum(1-(np.power((xi-val)/bw, 2))), npts*bw)
+    temparray = np.abs(xi - val)
+    temparray = temparray[temparray < bw]
+    return np.divide(np.sum(1-(np.power(temparray/bw, 2))), npts*bw*4/3)
 
 
 def EXPOKERN(xi, val, bw, npts):
@@ -125,9 +127,15 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
             Xmin, Xmax = self.range
             Npts = int((self.Xvalues_.shape[0])/3)
-            sortpts = np.sort(self.Xvalues_.copy())
+            sortpts = np.sort(self.Xvalues_.copy(), axis=0)
             self.Xpseudodata_ = 4*Xmin - 6*sortpts[:Npts] + \
-                4*sortpts[:2*Npts:2] - sortpts[:3*Npts:3]
+                4*sortpts[1:2*Npts:2] - sortpts[2:3*Npts:3]
+            print("NPTS: ", Npts)
+            print("XMIN: ", Xmin, " 4*XMIN:", 4*Xmin)
+            print("sorted!", sortpts)
+            print(4*Xmin - 6*sortpts[0]+4*sortpts[1]-sortpts[2])
+            print("PSEUDODATA: ", self.Xpseudodata_)
+            print("DATA:", self.Xvalues_)
 
         if self.n_approx >= 2:
 
@@ -192,6 +200,9 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
             returnval = KERNEL(xi, samplevalues, bw, npts) + \
                 KERNEL(xi, self.Xpseudodata_, bw, npts)
+            print("RETURNVAL", returnval)
+            print("Cont1:", KERNEL(xi, samplevalues, bw, npts))
+            print("Cont2:", KERNEL(xi, self.Xpseudodata_, bw, npts))
 
         return returnval if returnval > 1e-40 else 1e-40
 
