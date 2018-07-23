@@ -16,7 +16,8 @@ KernelDensityMod) has also been done to include boundary conditions.
 ### Requirements and installation
 
 Packages needed: sklearn, scipy, numpy
-To install, simply download the repo and add it to PYTHONPATH
+
+To install, simply download the repo and add it to your PYTHONPATH
 
 ### License
 
