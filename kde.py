@@ -149,9 +149,9 @@ class KernelDensityMod(BaseEstimator):
         if self.boundary == "CowlingHall" and X.shape[1] == 1:
             Xmin, Xmax = self.boundrange
             Npts = int((X.shape[0])/3)
-            sortpts = np.sort(X.copy())
+            sortpts = np.sort(X.copy(), axis=0)
             Xpseudodata = 4*Xmin - 6*sortpts[:Npts] + \
-                4*sortpts[:2*Npts:2] - sortpts[:3*Npts:3]
+                4*sortpts[1:2*Npts:2] - sortpts[2:3*Npts:3]
             X = np.concatenate((X, Xpseudodata))
 
         kwargs = self.metric_params
