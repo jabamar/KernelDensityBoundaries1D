@@ -10,6 +10,8 @@ from scipy import stats
 KERNELS = ['gaussian', 'tophat', 'epanechnikov', 'expo', 'linear']
 BOUNDARY = ['reflection', 'CowlingHall']
 
+MINIMUM_VALUE = 1e-40
+
 
 def GAUSSKERN(xi, mean, bw, npts):
     """ GAUSSIAN KERNEL
@@ -95,6 +97,8 @@ class KernelDensityBoundaries1D(BaseEstimator):
         self.n_approx = n_approx
         self.bandwidth = bandwidth
         self.boundary = boundary
+        self.cdf_values = None
+        self.xrangecdf = None
 
         if self.kernel not in KERNELS:
             raise RuntimeError("Kernel not valid!")
@@ -140,11 +144,12 @@ class KernelDensityBoundaries1D(BaseEstimator):
             Xvals = np.linspace(Xmin, Xmax, self.n_approx)
             self.interpol_ = interp1d(Xvals,
                                       [self.eval(xi, False) for xi in Xvals],
-                                      kind="cubic")
+                                      kind="cubic", fill_value=MINIMUM_VALUE,
+                                      bounds_error=False)
 
         return self
 
-    def eval(self, xi, usespline="False"):
+    def eval(self, xi, usespline=False):
         """ Evaluate point by point
 
         Parameters
@@ -164,7 +169,12 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
         # If spline, we return the interpolation and we skip the rest
         if usespline:
-            return self.interpol_(xi)
+            return np.float32(self.interpol_(xi))
+            # Xmin, Xmax = self.range
+            # if xi >= Xmin and xi <= Xmax:
+            #     return float(self.interpol_(xi))
+            # else:
+            #     return MINIMUM_VALUE
 
         # Choose kernel
         if self.kernel == "gaussian":
@@ -186,16 +196,22 @@ class KernelDensityBoundaries1D(BaseEstimator):
 
             Xmin, Xmax = self.range
 
-            returnval = KERNEL(xi, samplevalues, bw, npts) + \
-                KERNEL(2*Xmin - xi, samplevalues, bw, npts) + \
-                KERNEL(2*Xmax - xi, samplevalues, bw, npts)
+            if xi >= Xmin and xi <= Xmax:
+                returnval = KERNEL(xi, samplevalues, bw, npts) + \
+                    KERNEL(2*Xmin - xi, samplevalues, bw, npts) + \
+                    KERNEL(2*Xmax - xi, samplevalues, bw, npts)
+            else:
+                returnval = MINIMUM_VALUE
 
         elif self.boundary == "CowlingHall":
 
-            returnval = KERNEL(xi, samplevalues, bw, npts) + \
-                KERNEL(xi, self.Xpseudodata_, bw, npts)
+            if xi >= Xmin and xi <= Xmax:
+                returnval = KERNEL(xi, samplevalues, bw, npts) + \
+                    KERNEL(xi, self.Xpseudodata_, bw, npts)
+            else:
+                returnval = MINIMUM_VALUE
 
-        return returnval if returnval > 1e-40 else 1e-40
+        return returnval if returnval > MINIMUM_VALUE else MINIMUM_VALUE
 
     def score_samples(self, X, y=None):
         """Evaluate the density model on the data.
@@ -208,7 +224,10 @@ class KernelDensityBoundaries1D(BaseEstimator):
         density : ndarray, shape (n_samples,)
             The array of density evaluations.
         """
-        return [self.eval(xi, self.do_spline) for xi in X]
+        if self.do_spline:
+            return self.interpol_(X)
+        else:
+            return [self.eval(xi, False) for xi in X]
 
     def score(self, X, y=None):
         """Evaluates the total log probability for the array X
@@ -220,3 +239,52 @@ class KernelDensityBoundaries1D(BaseEstimator):
             An array of points to query.  Last dimension must be 1.
         """
         return(sum(np.log(self.score_samples(X))))
+
+    def cdf(self, npoints=100, xrange=None):
+        """Generates the cumulative density function
+
+        Parameters
+        ----------
+        npoints : number of points used to calculate the cdf.
+            Default is 100
+
+        xrange : points for which the cdf is calculated
+            (Optional, default is None)
+
+        returns two arrays:
+            self.cdf_values contains the cdf values for the points in
+            self.xrangecdf (which is also returned)
+        """
+        if self.Xvalues_ is None :
+            raise RuntimeError("KDE has not been fitted!")
+
+        if xrange is None:
+            Xmin, Xmax = self.range
+            xrange = np.linspace(Xmin, Xmax, npoints)
+
+        else:
+            npoints = len(xrange)
+            Xmin = xrange[0]
+            Xmax = xrange[npoints-1]
+
+        binwidth = (Xmax-Xmin)/npoints
+
+        self.cdf_values = np.cumsum(self.score_samples(xrange[:, np.newaxis]))*binwidth
+        self.cdf_values /= self.cdf_values[npoints-1]
+        self.xrangecdf = xrange
+
+        return self.cdf_values, self.xrangecdf
+
+    def generate_random(self, size=1, nxpoints=1000):
+        """Generates random numbers from the KDE
+
+        Parameters
+        ----------
+        size: Number of values to be generated
+        """
+        if self.cdf_values is None or self.xrangecdf is None:
+            self.cdf(npoints=nxpoints)
+
+        val_uniform = np.random.uniform(size=size)
+        corresponding_bins = np.searchsorted(self.cdf_values, val_uniform)
+        return self.xrangecdf[corresponding_bins]
